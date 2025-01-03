@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle!</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="battle.css" rel="stylesheet"> 
+</head>
+<body>
+    <div class="container-fluid canvas-container mt-0">
+        <div class="row mt-0 pt-0">
+            <div class="col-12 mt-0 pt-0">
+                <div class="grid my-0 py-0" id="terrain-grid">
+                    <div class="road-layer my-0 py-0" id="road-layer"></div>
+                    <div class="city-layer my-0 py-0" id="city-layer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <nav class="navbar fixed-bottom navbar-dark bg-dark">
+        <div class="container-fluid">
+            <div class="dropup">
+                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false" data-bs-display="static">
+                    Actions
+                </button>
+                <ul class="dropdown-menu" id="player-1" aria-labelledby="dropdownMenuButton">
+                    <li><a class="dropdown-item" href="#">Move</a></li>
+                    <li><a class="dropdown-item" href="#">Attack</a></li>
+                    <li><a class="dropdown-item" href="#">Build</a></li>
+                </ul>
+            </div>
+            <a class="navbar-brand" href="#" id="map-title">Actions</a>
+            <div class="dropup">
+                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false" data-bs-display="static">
+                    Actions
+                </button>
+                <ul class="dropdown-menu" id="player-2" aria-labelledby="dropdownMenuButton">
+                    <li><a class="dropdown-item" href="#">Move</a></li>
+                    <li><a class="dropdown-item" href="#">Attack</a></li>
+                    <li><a class="dropdown-item" href="#">Build</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="battle.map.js"></script>
+    <script src="functions.js"></script>
+
+    <script>
+        let grid, cityLayer;
+        let resizeTimeout;  // Declare at top level to avoid undefined errors
+
+        grid = document.querySelector('.grid');
+        const vh = window.innerHeight - document.querySelector('.navbar').offsetHeight;
+        const vw = window.innerWidth;
+
+        // Ensure integer square size
+        let squareSize = Math.floor((vh - 65) / 8);
+
+        // Adjust both on window resize and load
+        window.addEventListener('resize', adjustGridSize);
+        window.addEventListener('load', adjustGridSize);
+
+
+        // Possible Teams
+        const teams = [
+            { name: 'Chuds', color: '#0000ff', capitalIcon: 'fa-flag', bonuses: { movement: { woods: 1, grasslands: 2 }, sight: { hills: 1, grasslands: 2 } } },
+            { name: 'Foids', color: '#ff0000', capitalIcon: 'fa-flag-checkered', bonuses: { movement: { woods: 2, grasslands: 1 }, sight: { hills: 2, water: 1 } } },
+            { name: 'Goths', color: '#808080', capitalIcon: 'fa-skull', bonuses: { movement: { hills: 2, grasslands: 1 }, sight: { forrest: 2, hills: 1 } } },
+            { name: 'Simps', color: '#ffd700', capitalIcon: 'fa-heart', bonuses: { movement: { water: 2, grasslands: 1 }, sight: { grasslands: 2, capital: 1 } } },
+            { name: 'Naggers', color: '#669966', capitalIcon: 'fa-robot', bonuses: { movement: { grasslands: 3 }, sight: { hills: 2, water: 1 } } },
+            { name: 'Globies', color: '#add8e6', capitalIcon: 'fa-robot', bonuses: { movement: { water: 3, grasslands: 1 }, sight: { water: 2, grasslands: 1 } } }
+        ];
+
+        // Possible Terrains
+        const terrainTypes = [
+            { type: 'water', movementCost: 3, defModifier: 0, attModifier: 0, sightBonus: 0, value: 0, color: '#4da6ff', icon: 'fa-water' },
+            { type: 'grassland', movementCost: 1, defModifier: 1, attModifier: 1, sightBonus: 1, value: 1, color: '#8bc34a', icon: '' },
+            { type: 'forrest', movementCost: 2, defModifier: 2, attModifier: 1, sightBonus: 2, value: 5, color: '#388e3c', icon: 'fa-tree' },
+            { type: 'hill', movementCost: 2, defModifier: 3, attModifier: 2, sightBonus: 3, value: 1, color: '#a1887f', icon: 'fa-mound' },
+            { type: 'mountain', movementCost: 4, defModifier: 5, attModifier: 2, sightBonus: 4, value: 1, color: '#333', icon: 'fa-mountain' }
+        ];
+
+        // Active Players in game
+        const players = {
+            p1: { username: 'Player1', team: 'Chuds', score: 0, gold: 0, cityNames: ['Smash District', 'Brute District ', 'Hypno District', 'Arthuria', 'Tartaria', 'Nizzaria', 'Alamora', 'Thermopolia', 'Landria', 'Atlas'] },
+            p2: { username: 'Player2', team: 'Foids', score: 0, gold: 0 , cityNames: ['Gay District', 'Trans District ', 'Bi District', 'New Coont City', 'Pratland', 'Bintburg', 'Twatown', 'Jeetland', 'Hookerville', 'Hortown'] }
+        };
+
+        const botPlayers = {
+            p1: { username: 'Bot1', team: 'Goths', score: 0, gold: 0 },
+            p2: { username: 'Bot2', team: 'Simps', score: 0, gold: 0 }
+        };
+
+
+
+        window.addEventListener('load', () => {
+            grid = document.getElementById('terrain-grid');
+            cityLayer = document.getElementById('city-layer');
+            
+            adjustGridSize();
+
+            if (grid) {
+                const squares = grid.querySelectorAll('.square');
+                squares.forEach(square => square.remove());
+            }
+
+            if (window.mapData) {
+                generateGrid();
+                
+                renderRoads(mapData);
+                renderCities(mapData);
+
+                adjustCityLayerSize();
+            } else {
+                console.warn('Map data not ready, retrying...');
+                setTimeout(() => {
+                    if (window.mapData) {
+                        generateGrid();
+                        renderRoads(mapData);
+                        renderCities(mapData);
+                    }
+                }, 200);
+            }
+        });
+
+
+        
+        // Ensure terrain and cities align properly on resize
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                adjustGridSize();
+                adjustCityLayerSize();
+                renderRoads(mapData);
+                renderCities(mapData);  
+            }, 100);
+        });
+
+        // Generate Grid without overwriting city-layer
+        async function generateGrid() {
+            try {
+                if (!window.mapData) {
+                    console.error('mapData not found. Ensure battle.map.js is loaded correctly.');
+                    return;
+                }
+
+                document.getElementById('map-title').textContent = mapData.name;
+
+                // Generate terrain tiles without clearing city layer
+                mapData.tiles.forEach((tile, index) => {
+                let terrain = terrainTypes.find(t => t.type === tile.type) || terrainTypes[0];
+
+                if (tile.type.includes('capital')) {
+                    const playerKey = tile.type.split(' ')[1];
+                    const player = players[playerKey];
+                    const team = teams.find(t => t.name === player.team);
+                    
+                    if (team) {
+                        terrain = { color: team.color, icon: team.capitalIcon, type: 'capital' };
+                    }
+                }
+
+                const square = document.createElement('div');
+                square.className = 'square';
+                square.style.backgroundColor = terrain.color;
+                square.innerHTML = `<i class="fas fa-2xl ${terrain.icon}"></i>`;
+                square.setAttribute('data-type', terrain.type);
+
+                // Calculate correct grid placement
+                const x = index % mapData.dimensions.width;
+                const y = Math.floor(index / mapData.dimensions.width);
+
+                // Explicitly place tiles in grid
+                square.style.gridColumnStart = x + 1;
+                square.style.gridRowStart = y + 1;
+
+                grid.appendChild(square);
+            });
+
+
+            } catch (error) {
+                console.error('Error loading map:', error);
+            }
+            // mapData.tiles.forEach((tile, index) => {
+            //     const x = index % mapData.dimensions.width;
+            //     const y = Math.floor(index / mapData.dimensions.width);
+            //     console.log(`Tile ${index}: (x: ${x}, y: ${y}) - ${tile.type}`);
+            // });
+
+        }
+
+    </script>
+</body>
+</html>
